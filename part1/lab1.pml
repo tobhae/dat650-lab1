@@ -7,7 +7,7 @@ byte fork[N];
 ltl mutual_exclusion { [] (fork[0] <= 1 && fork [1] <= 1 && fork [2] <= 1 && fork[3] <= 1) }
 
 /* Liveness property: A philosopher eventually eats */
-ltl some_eating { <> (phil0_eating || phil1_eating || phil2_eating || phil3_eating) }
+ltl some_eating { []<> (phil0_eating || phil1_eating || phil2_eating || phil3_eating) }
 
 /* Track when philosophers are eating */
 bool eating = false;
