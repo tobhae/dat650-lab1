@@ -20,41 +20,31 @@ proctype phil(int id) {
   int right = (id+1) % N;
 
   do
-  :: printf("Philosopher %d is thinking\n", id);
+    :: printf("Philosopher %d is thinking\n", id);
 
-    if
-    :: (id % 2 == 0) ->   /* Even philosophers: left then right */
+      /* Pick up left fork */
       atomic {
         if
         :: fork[left] == 0 -> fork[left] = 1;
+            /* Value should not be > 1 */
+            assert(fork[left] <= 1);
             printf("Philosopher %d picked up fork %d\n", id, left);
-        :: else -> skip
-        fi
-      }
-      atomic {
-        if
-        :: fork[right] == 0 -> fork[right] = 1;
-            printf("Philosopher %d picked up fork %d\n", id, right);
+
         :: else -> skip
         fi
       }
 
-    :: else ->    /* Odd philosophers: right then left */
+      /* Pick up right fork */
       atomic {
         if
         :: fork[right] == 0 -> fork[right] = 1;
-            printf("Philosopher %d picked up fork %d\n", id, right);
+          /* Value should not be > 1 */
+          assert(fork[left] <= 1);
+          printf("Philosopher %d picked up fork %d\n", id, right);
+
         :: else -> skip
         fi
       }
-      atomic {
-        if
-        :: fork[left] == 0 -> fork[left] = 1;
-            printf("Philosopher %d picked up fork %d\n", id, left);
-        :: else -> skip
-        fi
-      }
-    fi;
 
     atomic {
       if 
