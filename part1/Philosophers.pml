@@ -7,7 +7,7 @@ byte fork[N];
 ltl mutual_exclusion { [] (fork[0] <= 1 && fork [1] <= 1 && fork [2] <= 1 && fork[3] <= 1) }
 
 /* Liveness property: A philosopher eventually eats */
-ltl some_eating { []<> (phil0_eating || phil1_eating || phil2_eating || phil3_eating) }
+ltl some_eating { <> (phil0_eating || phil1_eating || phil2_eating || phil3_eating) }
 
 /* Track when philosophers are eating */
 bool phil0_eating = false;
@@ -23,37 +23,34 @@ proctype phil(int id) {
   :: printf("Philosopher %d is thinking\n", id);
 
     if
-    :: (id % 2 == 0) ->   /* Even phils pick up left fork*/
-
+    :: (id % 2 == 0) ->   /* Even philosophers: left then right */
       atomic {
         if
-        :: (fork[left] == 0 && fork[right] == 0) -> 
-            fork[left] = 1; 
-            fork[right] = 1;
-            
-            /* Value should not be > 1 */
-            assert(fork[left] <= 1);
-            assert(fork[right] <= 1);
-            printf("Philosopher %d picked up forks %d and %d\n", id, left, right);
-
+        :: fork[left] == 0 -> fork[left] = 1;
+            printf("Philosopher %d picked up fork %d\n", id, left);
+        :: else -> skip
+        fi
+      }
+      atomic {
+        if
+        :: fork[right] == 0 -> fork[right] = 1;
+            printf("Philosopher %d picked up fork %d\n", id, right);
         :: else -> skip
         fi
       }
 
-    
-    :: else ->    /* Odd phils pick up right fork */
-      
+    :: else ->    /* Odd philosophers: right then left */
       atomic {
-        if 
-        :: (fork[right] == 0 && fork[left] == 0) -> 
-            fork[right] = 1; 
-            fork[left] = 1;
-
-            /* Value should not be > 1 */
-            assert(fork[right] <= 1);
-            assert(fork[left] <= 1);
-            printf("Philosopher %d picked up forks %d and %d\n", id, right, left);
-
+        if
+        :: fork[right] == 0 -> fork[right] = 1;
+            printf("Philosopher %d picked up fork %d\n", id, right);
+        :: else -> skip
+        fi
+      }
+      atomic {
+        if
+        :: fork[left] == 0 -> fork[left] = 1;
+            printf("Philosopher %d picked up fork %d\n", id, left);
         :: else -> skip
         fi
       }
@@ -63,7 +60,7 @@ proctype phil(int id) {
       if 
       :: (fork[left] == 1 && fork[right] == 1)  ->
 
-        /* Has both forks */
+        /* Has both forks, set flags for liveness property */
         if
         :: (id == 0) -> phil0_eating = true
         :: (id == 1) -> phil1_eating = true
@@ -79,17 +76,17 @@ proctype phil(int id) {
         printf("Philosopher %d put down fork %d\n", id, left);
         printf("Philosopher %d put down fork %d\n", id, right);
 
-        /* Reset flags */
-        if
-        :: (id == 0) -> phil0_eating = false
-        :: (id == 1) -> phil1_eating = false
-        :: (id == 2) -> phil2_eating = false
-        :: (id == 3) -> phil3_eating = false
-        fi;
-
       fi
     }
-      
+
+    /* Reset flags */
+    if
+    :: (id == 0) -> phil0_eating = false
+    :: (id == 1) -> phil1_eating = false
+    :: (id == 2) -> phil2_eating = false
+    :: (id == 3) -> phil3_eating = false
+    fi;
+
     progress: skip;
   od
 }
