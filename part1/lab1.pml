@@ -23,74 +23,95 @@ proctype phil(int id) {
   do
   :: printf("Philosopher %d is thinking\n", id);
 
-    /* Pick up left fork */
-     atomic {
-       if
-       :: fork[left] == 0 -> fork[left] = 1;
-          
+    if
+    :: (id % 2 == 0) ->   /* Even phils pick up left fork*/
+
+      atomic {
+        if
+        :: fork[left] == 0 -> fork[left] = 1;
+            
+            /* Value should not be > 1 */
+            assert(fork[left] <= 1);
+            printf("Philosopher %d picked up fork %d\n", id, left);
+
+        :: else -> skip
+        fi
+      }
+
+      /* Pick up right fork */
+      atomic {
+        if
+        :: fork[right] == 0 -> fork[right] = 1;
+
+            /* Value should not be > 1 */
+            assert(fork[right] <= 1);
+            printf("Philosopher %d picked up fork %d\n", id, right);
+
+        :: else -> skip
+        fi
+      }
+    
+    :: else ->    /* Odd phils pick up right fork */
+      
+      atomic {
+        if 
+        :: fork[right] == 0 -> fork[right] = 1;
+
+          /* Value should not be > 1 */
+          assert(fork[right] <= 1);
+          printf("Philosopher %d picked up fork %d\n", id, right);
+
+        :: else -> skip
+        fi
+      }
+
+      atomic {
+        if 
+        :: fork[left] == 0 -> fork[left] = 1;
+
           /* Value should not be > 1 */
           assert(fork[left] <= 1);
-
           printf("Philosopher %d picked up fork %d\n", id, left);
-       :: else -> skip
-       fi
-     }
 
-    /* Pick up right fork */
+        :: else -> skip
+        fi
+      }
+    fi;
+
     atomic {
-       if
-       :: fork[right] == 0 -> fork[right] = 1;
+      if 
+      :: (fork[left] == 1 && fork[right] == 1)  ->
 
-	  /* Value should not be > 1 */
-          assert(fork[left] <= 1);
+        /* Has both forks */
+        eating = true;
+        if
+        :: (id == 0) -> phil0_eating = true
+        :: (id == 1) -> phil1_eating = true
+        :: (id == 2) -> phil2_eating = true
+        :: (id == 3) -> phil3_eating = true
+        fi;
+        
+        printf("Philosopher %d is eating with forks %d and %d\n", id, left, right);
 
-          printf("Philosopher %d picked up fork %d\n", id, right);
-       :: else -> skip
-       fi
+        /* Put down both forks after eating */
+        fork[left] = 0;
+        fork[right] = 0;
+        printf("Philosopher %d put down fork %d\n", id, left);
+        printf("Philosopher %d put down fork %d\n", id, right);
+
+        /* Reset flags */
+        eating = false;
+        if
+        :: (id == 0) -> phil0_eating = false
+        :: (id == 1) -> phil1_eating = false
+        :: (id == 2) -> phil2_eating = false
+        :: (id == 3) -> phil3_eating = false
+        fi;
+
+      fi
     }
-
-     /* Only eat if philosopher have both forks */
-     atomic {
-       if 
-       :: (fork[left] == 1 && fork[right] == 1) ->
-
-	  /* Check if both forks are picked up before eating */
-          assert(fork[left] == 1);
-          assert(fork[right] == 1);  
-
-	  eating = true;
-	  if
-	  :: (id == 0) -> phil0_eating = true
-	  :: (id == 1) -> phil1_eating = true
-	  :: (id == 2) -> phil2_eating = true
-	  :: (id == 3) -> phil3_eating = true
-	  fi;
-
-          printf("Philosopher %d is eating with forks %d and %d\n", id, left, right);
-
-          /* Put down both forks after eating */
-	  fork[left] = 0;
-	  fork[right] = 0;
-	  printf("Philosopher %d put down fork %d\n", id, left);
-	  printf("Philosopher %d put down fork %d\n", id, right);
-
-	  /* Reset flags */
-	  eating = false;
-	  if
-	  :: (id == 0) -> phil0_eating = false
-	  :: (id == 1) -> phil1_eating = false
-	  :: (id == 2) -> phil2_eating = false
-	  :: (id == 3) -> phil3_eating = false
-	  fi;
-
-       :: else ->
-	  /* Couldn't get both forks, release the one we have for deadlock protection */ 
-          fork[left] = 0;
-	  fork[right] = 0;
-	  printf("Philosopher %d released it's fork (couldn't get both)\n", id);
-       fi
-     }
-     progress: skip;
+      
+    progress: skip;
   od
 }
 
