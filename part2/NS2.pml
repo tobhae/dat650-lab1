@@ -71,5 +71,41 @@ active proctype Alice() {
 }
 
 active proctype Bob() {
-   printf("placeholder for Bob\n")
+
+  mtype pkey;      /* the other agent's public key                 */
+  mtype pnonce;    /* nonce that we receive from the other agent   */
+  Crypt messageBA; /* our encrypted message to the other party     */
+  Crypt data;      /* received encrypted message                   */
+
+  /* Initialization */
+  partnerB = agentA;
+  pkey = keyA;
+
+  /* Wait for the first message from Alice */
+  network ? (msg1, agentB, data);
+
+  /* Verify the message, must be encrypted with Bob's public key */
+  (data.key == keyB);
+
+  /* Obtain Alice's nonce */
+  pnonce = data.content2;
+
+  /* Prepare message 2*/
+  messageBA.key = pkey;
+  messageBA.content1 = pnonce;
+  messageBA.content2 = nonceB;
+
+  /* Send message to Alice */
+  network ! msg2 (partnerB, messageBA);
+
+  /* Wait for message 3 */
+  network ? (msg3, agentB, data);
+
+  /* Verify correctness, must be encrypted with Bob's key and contains his nonce */
+  (data.key == keyB) && (data.content1 == nonceB);
+
+  /* and last - update the auxilary status variable */
+  statusB = ok;
 }
+
+ltl task2 { <> (statusA == ok && statusB == ok) }
