@@ -8,12 +8,27 @@ chan network = [0] of {mtype, /* msg# */
 		       Crypt
 };
 
+/* LTL properties */
+ltl task2 { <> (statusA == ok && statusB == ok) }
+
+/* If both run to completion then they must have each other as partner */
+ltl propAB { [] ((statusA == ok && statusB == ok) -> (partnerA == agentB && partnerB == agentA)) }
+
+/* If A finishes and believes it talked to B, then Intruder must not know A's nonce */
+ltl propA { [] ((statusA == ok && partnerA == agentB) -> (! knows_nonceA)) }
+
+/* If B finishes and believes it talked to A, then Intruder must not know B's nonce */
+ltl propB { [] ((statusB == ok && partnerB == agentA) -> (! knows_nonceB)) }
+
 /* global variables for verification*/
 mtype partnerA, partnerB;
 mtype statusA = err;
 mtype statusB = err;
 
-/* Agent (A)lice */
+/* Intruder ghost variables */
+bool knows_nonceA = false;
+bool knows_nonceB = false;
+
 active proctype Alice() {
   /* local variables */
 
@@ -108,48 +123,94 @@ active proctype Bob() {
   statusB = ok;
 }
 
-ltl task2 { <> (statusA == ok && statusB == ok) }
-
-/* Starting code for the Intruder process */
 active proctype Intruder() {
   mtype msg, recpt;
   Crypt data, intercepted;
-  do
-    :: network ? (msg, _, data) ->
-       if /* perhaps store the message */
-	 :: intercepted.key   = data.key;
-	    intercepted.content1 = data.content1;
-	    intercepted.content2 = data.content2;
-	 :: skip;
-       fi ;
 
-    :: /* Replay or send a message */
-       if /* choose message type */
-	 :: msg = msg1;
-	 :: msg = msg2;
-	 :: msg = msg3;
-       fi ;
-       if /* choose a recepient */
-	 :: recpt = agentA;
-	 :: recpt = agentB;
-       fi ;
-       if /* replay intercepted message or assemble it */
-	 :: data.key    = intercepted.key;
-	    data.content1  = intercepted.content1;
-	    data.content2  = intercepted.content2;
-	 :: if /* assemble content1 */
-	      :: data.content1 = agentA;
-	      :: data.content1 = agentB;
-	      :: data.content1 = agentI;
-	      :: data.content1 = nonceI;
-	    fi ;
-	    if /* assemble key */
-	      :: data.key = keyA;
-	      :: data.key = keyB;
-	      :: data.key = keyI;
-	    fi ;
-	    data.content2 = nonceI;
-       fi ;
-      network ! msg (recpt, data);
-  od
+  do
+  :: network ? (msg, _, data) ->
+       if
+       :: intercepted.key      = data.key;
+          intercepted.content1 = data.content1;
+          intercepted.content2 = data.content2;
+
+          /* If the message is encrypted with the intruder's key, 
+             decrypt it and learn any nonces it contains. */
+          if
+          :: (data.key == keyI) ->
+               /* msg1 format: { agent, nonce } -> content2 is the nonce */
+               if
+               :: (data.content2 == nonceA) -> knows_nonceA = true;
+               :: (data.content2 == nonceB) -> knows_nonceB = true;
+               :: else -> skip;
+               fi;
+
+               /* msg2 format: { nonce1, nonce2 } -> both fields could be nonces */
+               if
+               :: (data.content1 == nonceA) -> knows_nonceA = true;
+               :: (data.content1 == nonceB) -> knows_nonceB = true;
+               :: else -> skip;
+               fi;
+
+               if
+               :: (data.content2 == nonceA) -> knows_nonceA = true;
+               :: (data.content2 == nonceB) -> knows_nonceB = true;
+               :: else -> skip;
+               fi
+          :: else -> skip  /* Not encrypted to intruder, cannot decrypt */
+          fi
+       :: skip  /* Choose not to store this message */
+       fi;
+
+  ::  /* Replay or send a message */
+     /* choose message type */
+     if
+     :: msg = msg1;
+     :: msg = msg2;
+     :: msg = msg3;
+     fi;
+
+     /* choose recipient */
+     if
+     :: recpt = agentA;
+     :: recpt = agentB;
+     fi;
+
+     /* Choose to replay previously intercepted message or assemble a new one */
+     if
+     :: /* replay stored intercepted message (unmodified) */
+        data.key      = intercepted.key;
+        data.content1 = intercepted.content1;
+        data.content2 = intercepted.content2;
+     :: /* assemble content1 */
+        if
+        :: data.content1 = agentA;
+        :: data.content1 = agentB;
+        :: data.content1 = agentI;
+
+        /* Intruder can also put nonceA/nonceB here only if it knows it */
+        :: (knows_nonceA) -> data.content1 = nonceA;
+        :: (knows_nonceB) -> data.content1 = nonceB;
+        fi;
+
+        
+        if /* assemble key */
+        :: data.key = keyA;
+        :: data.key = keyB;
+        :: data.key = keyI;
+        fi;
+
+        if
+        :: (msg == msg3) -> data.content2 = 0; /* msg3 carries only content1 */
+        :: /* msg1 or msg2: allow nonce usage only if known */
+           if
+           :: (knows_nonceA) -> data.content2 = nonceA;
+           :: (knows_nonceB) -> data.content2 = nonceB;
+           :: else -> data.content2 = nonceI;  /* Use Intruder's own nonce if nothing known */
+           fi
+        fi
+     fi;
+
+     network ! msg (recpt, data)
+  od;
 }
