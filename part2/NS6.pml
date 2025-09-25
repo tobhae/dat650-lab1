@@ -40,8 +40,12 @@ active proctype Alice() {
 
   /* Initialization  */
 
-  partnerA = agentB;
-  pkey     = keyB;
+  if 
+  :: partnerA = agentB;
+     pkey     = keyB;
+  :: partnerA = agentI;
+     pkey     = keyI;
+  fi;
 
   /* Prepare the first message */
 
