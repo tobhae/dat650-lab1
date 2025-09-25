@@ -1,7 +1,7 @@
 mtype = {ok, err, msg1, msg2, msg3, keyA, keyB, agentA, agentB,
 	 nonceA, nonceB, agentI, keyI, nonceI };
 
-typedef Crypt { mtype key, content1, content2 };
+typedef Crypt { mtype key, content1, content2, content3 };
 
 chan network = [0] of {mtype, /* msg# */
 		       mtype, /* receiver */
@@ -52,6 +52,7 @@ active proctype Alice() {
   messageAB.key = pkey;
   messageAB.content1 = agentA;
   messageAB.content2 = nonceA;
+  messageAB.content3 = 0;       /* Not used in msg1 */
 
   /* Send the first message to the other party */
 
@@ -68,17 +69,18 @@ active proctype Alice() {
      received nonce is the one that we have sent earlier; block
      otherwise.  */
 
-  (data.key == keyA) && (data.content1 == nonceA);
+  (data.key == keyA) && (data.content2 == nonceA) && (data.content1 == partnerA);
 
   /* Obtain Bob's nonce */
 
-  pnonce = data.content2;
+  pnonce = data.content3;
 
   /* Prepare the last message */
   messageAB.key = pkey;
   messageAB.content1 = pnonce;
   messageAB.content2 = 0;  /* content2 is not used in the last message,
                               just set it to 0 */
+  messageAB.content3 = 0;  /* content3 is not used in the last message */
 
 
   /* Send the prepared messaage */
@@ -111,8 +113,9 @@ active proctype Bob() {
 
   /* Prepare message 2*/
   messageBA.key = pkey;
-  messageBA.content1 = pnonce;
-  messageBA.content2 = nonceB;
+  messageBA.content1 = agentB;  /* Bob's id */
+  messageBA.content2 = pnonce;  /* Alice's nonce */
+  messageBA.content3 = nonceB;  /* Bob's nonce */
 
   /* Send message to Alice */
   network ! msg2 (partnerB, messageBA);
@@ -137,6 +140,7 @@ active proctype Intruder() {
        :: intercepted.key      = data.key;
           intercepted.content1 = data.content1;
           intercepted.content2 = data.content2;
+          intercepted.content3 = data.content3;
 
           /* If the message is encrypted with the intruder's key, 
              decrypt it and learn any nonces it contains. */
@@ -151,16 +155,17 @@ active proctype Intruder() {
 
                /* msg2 format: { nonce1, nonce2 } -> both fields could be nonces */
                if
-               :: (data.content1 == nonceA) -> knows_nonceA = true;
-               :: (data.content1 == nonceB) -> knows_nonceB = true;
+               :: (data.content2 == nonceA) -> knows_nonceA = true;
+               :: (data.content2 == nonceB) -> knows_nonceB = true;
                :: else -> skip;
                fi;
 
                if
-               :: (data.content2 == nonceA) -> knows_nonceA = true;
-               :: (data.content2 == nonceB) -> knows_nonceB = true;
+               :: (data.content3 == nonceA) -> knows_nonceA = true;
+               :: (data.content3 == nonceB) -> knows_nonceB = true;
                :: else -> skip;
-               fi
+               fi;
+
           :: else -> skip  /* Not encrypted to intruder, cannot decrypt */
           fi
        :: skip  /* Choose not to store this message */
@@ -186,6 +191,7 @@ active proctype Intruder() {
         data.key      = intercepted.key;
         data.content1 = intercepted.content1;
         data.content2 = intercepted.content2;
+        data.content3 = intercepted.content3;
      :: /* assemble content1 */
         if
         :: data.content1 = agentA;
@@ -205,14 +211,38 @@ active proctype Intruder() {
         fi;
 
         if
-        :: (msg == msg3) -> data.content2 = 0; /* msg3 carries only content1 */
-        :: /* msg1 or msg2: allow nonce usage only if known */
+        :: (msg == msg1) -> 
+           /* msg1: content2 is nonce, content3 unused */
            if
            :: (knows_nonceA) -> data.content2 = nonceA;
            :: (knows_nonceB) -> data.content2 = nonceB;
-           :: else -> data.content2 = nonceI;  /* Use Intruder's own nonce if nothing known */
-           fi
-        fi
+           :: else -> data.content2 = nonceI;
+           fi;
+           data.content3 = 0;
+
+        :: (msg == msg2) ->
+           /* msg2: content1 is sender (already set above), content2 and content3 are nonces */
+           if
+           :: (knows_nonceA) -> data.content2 = nonceA;
+           :: (knows_nonceB) -> data.content2 = nonceB;
+           :: else -> data.content2 = nonceI;
+           fi;
+           if
+           :: (knows_nonceA) -> data.content3 = nonceA;
+           :: (knows_nonceB) -> data.content3 = nonceB;
+           :: else -> data.content3 = nonceI;
+           fi;
+
+        :: (msg == msg3) -> 
+           /* msg3: content1 is nonce, content2 and content3 unused */
+           if
+           :: (knows_nonceA) -> data.content1 = nonceA;
+           :: (knows_nonceB) -> data.content1 = nonceB;
+           :: else -> data.content1 = nonceI;
+           fi;
+           data.content2 = 0;
+           data.content3 = 0;
+        fi;
      fi;
 
      network ! msg (recpt, data)
